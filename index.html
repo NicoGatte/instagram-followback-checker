@@ -33,13 +33,19 @@
   .btn-clear:hover { background: #e5e5e5; }
 
   #results { display: none; margin-top: 1.5rem; }
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1rem; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1rem; }
   .stat { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 1rem; text-align: center; }
   .stat-num { font-size: 26px; font-weight: 600; }
   .stat-label { font-size: 11px; color: #888; margin-top: 2px; }
   .stat-num.red { color: #c0392b; }
   .stat-num.green { color: #1a7a1a; }
   .stat-num.blue { color: #2563eb; }
+  .stat-num.orange { color: #d97706; }
+
+  .tabs { display: flex; gap: 0; margin-bottom: 1rem; border-bottom: 2px solid #e5e5e5; }
+  .tab { flex: 1; padding: 12px 16px; background: #fff; border: none; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .tab:hover { background: #fafafa; }
+  .tab.active { color: #111; border-bottom-color: #111; }
 
   .results-box { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; overflow: hidden; }
   .results-header { padding: 12px 16px; border-bottom: 1px solid #e5e5e5; display: flex; align-items: center; justify-content: space-between; }
@@ -119,11 +125,12 @@
   const followers = await fetchAll('followers');
   const following = await fetchAll('following');
   const nonSeguono = following.filter(u => !followers.includes(u));
-  const output = JSON.stringify({ followers: followers.length, following: following.length, nonSeguono });
+  const nonRicambiati = followers.filter(u => !following.includes(u));
+  const output = JSON.stringify({ followers: followers.length, following: following.length, nonSeguono, nonRicambiati });
   console.log('%cCOPIA QUESTO:', 'color:lime;font-weight:bold;font-size:14px');
   console.log(output);
   try { copy(output); } catch(e) {}
-  alert(`Fatto! ${nonSeguono.length} non ti seguono. Output copiato.`);
+  alert(`Fatto! ${nonSeguono.length} non ti seguono, ${nonRicambiati.length} non ricambiati. Output copiato.`);
 })();</pre>
     </div>
   </div>
@@ -135,7 +142,7 @@
       <div class="step-title">Incolla l'output qui sotto</div>
     </div>
     <p>Dopo che lo script finisce, copia il JSON stampato in console e incollalo qui.</p>
-    <textarea id="json-input" placeholder='{"followers":320,"following":410,"nonSeguono":["user1","user2","user3"]}'></textarea>
+    <textarea id="json-input" placeholder='{"followers":320,"following":410,"nonSeguono":["user1","user2"],"nonRicambiati":["user3","user4"]}'></textarea>
     <div class="error-box" id="error-box">JSON non valido o formato non riconosciuto. Assicurati di copiare l'intera riga di output.</div>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn btn-primary" onclick="analyze()">Analizza</button>
@@ -148,11 +155,18 @@
     <div class="stats">
       <div class="stat"><div class="stat-num blue" id="s-following">0</div><div class="stat-label">Segui</div></div>
       <div class="stat"><div class="stat-num green" id="s-followers">0</div><div class="stat-label">Ti seguono</div></div>
-      <div class="stat"><div class="stat-num red" id="s-non">0</div><div class="stat-label">Non ricambiano</div></div>
+      <div class="stat"><div class="stat-num red" id="s-non">0</div><div class="stat-label">Non ti seguono</div></div>
+      <div class="stat"><div class="stat-num orange" id="s-non-reciprocated">0</div><div class="stat-label">Non ricambiati</div></div>
     </div>
+    
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('non-following', this)">Non ti seguono</button>
+      <button class="tab" onclick="switchTab('non-reciprocated', this)">Non ricambiati</button>
+    </div>
+
     <div class="results-box">
       <div class="results-header">
-        <span class="results-title">Non ti seguono</span>
+        <span class="results-title" id="results-title">Non ti seguono</span>
         <input class="search-input" type="text" placeholder="Cerca..." oninput="filterList(this.value)" id="search-box">
       </div>
       <div class="user-list" id="user-list"></div>
@@ -162,6 +176,9 @@
 
 <script>
   let allUsers = [];
+  let nonFollowingUsers = [];
+  let nonReciprocatedUsers = [];
+  let currentTab = 'non-following';
 
   function copyScript(btn) {
     const code = document.getElementById('script-code').textContent;
@@ -179,16 +196,43 @@
     try {
       const data = JSON.parse(raw);
       if (!data.nonSeguono || !Array.isArray(data.nonSeguono)) throw new Error();
-      allUsers = data.nonSeguono;
+      
+      nonFollowingUsers = data.nonSeguono;
+      nonReciprocatedUsers = data.nonRicambiati || [];
+      
       document.getElementById('s-following').textContent = data.following || '?';
       document.getElementById('s-followers').textContent = data.followers || '?';
-      document.getElementById('s-non').textContent = allUsers.length;
+      document.getElementById('s-non').textContent = nonFollowingUsers.length;
+      document.getElementById('s-non-reciprocated').textContent = nonReciprocatedUsers.length;
+      
+      // Mostra la tab attiva di default
+      currentTab = 'non-following';
+      allUsers = nonFollowingUsers;
+      document.getElementById('results-title').textContent = 'Non ti seguono';
       renderList(allUsers);
+      
       document.getElementById('results').style.display = 'block';
       document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
     } catch(e) {
       errBox.style.display = 'block';
     }
+  }
+
+  function switchTab(tab, btn) {
+    currentTab = tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    
+    if (tab === 'non-following') {
+      allUsers = nonFollowingUsers;
+      document.getElementById('results-title').textContent = 'Non ti seguono';
+    } else {
+      allUsers = nonReciprocatedUsers;
+      document.getElementById('results-title').textContent = 'Non ricambiati';
+    }
+    
+    document.getElementById('search-box').value = '';
+    renderList(allUsers);
   }
 
   function renderList(users) {
@@ -217,6 +261,8 @@
     document.getElementById('results').style.display = 'none';
     document.getElementById('error-box').style.display = 'none';
     allUsers = [];
+    nonFollowingUsers = [];
+    nonReciprocatedUsers = [];
   }
 </script>
 </body>
